@@ -14,14 +14,11 @@ MODULE_EXPORT const char *obs_module_description(void)
     return "Dynamic Recording Path Plugin";
 }
 
-static std::string get_current_scene_name()
+static std::string selected_source_name;
+
+static std::string get_selected_source_name()
 {
-    obs_source_t *scene = obs_frontend_get_current_scene();
-    const char *name = scene ? obs_source_get_name(scene) : "UnknownScene";
-    std::string result = name;
-    if (scene)
-        obs_source_release(scene);
-    return result;
+    return selected_source_name.empty() ? "UnknownSource" : selected_source_name;
 }
 
 static std::string get_date_string()
@@ -40,13 +37,13 @@ static std::string get_date_string()
 
 static std::string expand_path_template(const std::string &base_path)
 {
-    std::string scene = get_current_scene_name();
+    std::string source = get_selected_source_name();
     std::string date = get_date_string();
 
-    std::string suffix = "%DATE%/%SCENE%";
+    std::string suffix = "%DATE%/%SOURCE%";
     size_t pos;
-    while ((pos = suffix.find("%SCENE%")) != std::string::npos)
-        suffix.replace(pos, 8, scene);
+    while ((pos = suffix.find("%SOURCE%")) != std::string::npos)
+        suffix.replace(pos, 9, source);
     while ((pos = suffix.find("%DATE%")) != std::string::npos)
         suffix.replace(pos, 7, date);
 
@@ -70,9 +67,36 @@ static void on_frontend_event(enum obs_frontend_event event)
     }
 }
 
+static bool source_filter(void *data, obs_source_t *source)
+{
+    return obs_source_get_type(source) == OBS_SOURCE_TYPE_INPUT;
+}
+
+static void dynamic_path_properties_modified(obs_properties_t *props, obs_property_t *p, obs_data_t *settings)
+{
+    const char *name = obs_data_get_string(settings, "selected_source");
+    if (name)
+        selected_source_name = name;
+}
+
+static obs_properties_t *dynamic_path_properties(void *data)
+{
+    obs_properties_t *props = obs_properties_create();
+
+    obs_property_t *p = obs_properties_add_list(props, "selected_source",
+        "Source for Folder Naming", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+
+    obs_property_list_add_sources(p, source_filter, nullptr);
+    obs_property_set_modified_callback(p, dynamic_path_properties_modified);
+
+    return props;
+}
+
 bool obs_module_load(void)
 {
     blog(LOG_INFO, "Dynamic Recording Path Plugin loaded.");
     obs_frontend_add_event_callback(on_frontend_event, nullptr);
+    obs_register_module_config_path("obs-dynamic-path-plugin");
+    obs_register_module_properties(dynamic_path_properties);
     return true;
 }
