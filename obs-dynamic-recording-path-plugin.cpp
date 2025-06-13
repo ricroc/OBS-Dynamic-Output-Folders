@@ -15,10 +15,33 @@ MODULE_EXPORT const char *obs_module_description(void)
 }
 
 static std::string selected_source_name;
+static bool use_active_source = true;
+
+static std::string get_active_source_name()
+{
+    obs_source_t *scene = obs_frontend_get_current_scene();
+    if (!scene)
+        return "UnknownScene";
+
+    obs_scene_t *scene_data = obs_scene_from_source(scene);
+    if (!scene_data)
+        return "UnknownScene";
+
+    obs_sceneitem_t *item = obs_scene_get_sceneitem(scene_data, 0);
+    if (!item)
+        return "UnknownSource";
+
+    obs_source_t *source = obs_sceneitem_get_source(item);
+    if (!source)
+        return "UnknownSource";
+
+    const char *name = obs_source_get_name(source);
+    return name ? name : "UnknownSource";
+}
 
 static std::string get_selected_source_name()
 {
-    return selected_source_name.empty() ? "UnknownSource" : selected_source_name;
+    return use_active_source ? get_active_source_name() : (selected_source_name.empty() ? "UnknownSource" : selected_source_name);
 }
 
 static std::string get_date_string()
@@ -77,14 +100,17 @@ static void dynamic_path_properties_modified(obs_properties_t *props, obs_proper
     const char *name = obs_data_get_string(settings, "selected_source");
     if (name)
         selected_source_name = name;
+    use_active_source = obs_data_get_bool(settings, "use_active_source");
 }
 
 static obs_properties_t *dynamic_path_properties(void *data)
 {
     obs_properties_t *props = obs_properties_create();
 
+    obs_properties_add_bool(props, "use_active_source", "Use Active Source Automatically");
+
     obs_property_t *p = obs_properties_add_list(props, "selected_source",
-        "Source for Folder Naming", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
+        "Fallback Source for Folder Naming", OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
 
     obs_property_list_add_sources(p, source_filter, nullptr);
     obs_property_set_modified_callback(p, dynamic_path_properties_modified);
